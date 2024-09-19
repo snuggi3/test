@@ -1,0 +1,1382 @@
+
+User
+You said:
+Write a shell script that will cycle through a list of directories recursively and save the file names into a text document
+ChatGPT said:
+GPT
+Sure! Below is a PowerShell script that recursively goes through a list of directories and saves all the file names (with their full paths) into a text document:
+
+powershell
+Copy code
+# Define the list of directories
+$directories = @(
+    "C:\Path\To\First\Directory",
+    "C:\Path\To\Second\Directory",
+    "C:\Path\To\Another\Directory"
+)
+
+# Define the output file
+$outputFile = "C:\Path\To\output.txt"
+
+# Clear or create the output file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+
+# Loop through each directory
+foreach ($dir in $directories) {
+    # Check if directory exists
+    if (Test-Path $dir) {
+        # Get all files recursively in the directory
+        Get-ChildItem -Path $dir -Recurse -File | ForEach-Object {
+            # Write the full file path to the output file
+            $_.FullName | Out-File -FilePath $outputFile -Append
+        }
+    } else {
+        Write-Host "Directory '$dir' does not exist!" -ForegroundColor Red
+    }
+}
+
+Write-Host "File list saved to $outputFile"
+Explanation:
+$directories: This is an array that holds the paths to all the directories you want to cycle through.
+$outputFile: This variable defines the output file where the file names will be saved.
+Clear-Content: This ensures that if the output file already exists, it will be cleared before appending new data.
+Get-ChildItem -Recurse -File: This retrieves all files recursively from the directory.
+Out-File -Append: This appends the file names (with full paths) to the output file.
+The script checks if the directory exists before processing it to avoid errors.
+You can modify the $directories array to include any directories you'd like to search. Make sure to replace the paths in the script with the actual paths on your system.
+
+Let me know if you need any adjustments!
+
+
+
+
+
+You said:
+now check to see if the file names exist in a directory destination and if not then copy that file to the directory destination
+ChatGPT said:
+GPT
+Sure! Below is an enhanced version of the PowerShell script that checks if a file from the source directories exists in the destination directory. If the file does not exist in the destination directory, it copies the file over.
+
+Here’s the updated script:
+
+powershell
+Copy code
+# Define the list of source directories
+$sourceDirectories = @(
+    "C:\Path\To\First\Directory",
+    "C:\Path\To\Second\Directory",
+    "C:\Path\To\Another\Directory"
+)
+
+# Define the destination directory
+$destinationDirectory = "C:\Path\To\Destination\Directory"
+
+# Define the output file to save the list of files copied
+$outputFile = "C:\Path\To\output.txt"
+
+# Clear or create the output file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+
+# Ensure destination directory exists, if not, create it
+if (-not (Test-Path $destinationDirectory)) {
+    New-Item -ItemType Directory -Path $destinationDirectory
+}
+
+# Loop through each source directory
+foreach ($dir in $sourceDirectories) {
+    # Check if source directory exists
+    if (Test-Path $dir) {
+        # Get all files recursively in the source directory
+        Get-ChildItem -Path $dir -Recurse -File | ForEach-Object {
+            $sourceFile = $_.FullName
+            $destinationFile = Join-Path -Path $destinationDirectory -ChildPath $_.Name
+
+            # Check if the file already exists in the destination
+            if (-not (Test-Path $destinationFile)) {
+                # If it doesn't exist, copy the file to the destination
+                Copy-Item -Path $sourceFile -Destination $destinationDirectory
+
+                # Log the copied file path to the output file
+                $sourceFile | Out-File -FilePath $outputFile -Append
+
+                Write-Host "Copied: $sourceFile to $destinationDirectory"
+            } else {
+                Write-Host "File already exists: $destinationFile" -ForegroundColor Yellow
+            }
+        }
+    } else {
+        Write-Host "Source directory '$dir' does not exist!" -ForegroundColor Red
+    }
+}
+
+Write-Host "File copying complete. See $outputFile for a list of copied files."
+Explanation of Updates:
+$destinationDirectory: Specifies where the files should be copied if they don't already exist.
+Test-Path: This checks if the file already exists in the destination directory. If it does not, it copies the file over.
+Copy-Item: Copies the file from the source to the destination directory.
+Join-Path: Combines the destination directory path and the file name to get the full path in the destination.
+Logging: If a file is copied, its path is appended to the $outputFile for reference.
+Write-Host: Gives feedback during the script execution, indicating whether files were copied or already existed.
+Additional Notes:
+If the destination directory doesn't exist, the script creates it using New-Item -ItemType Directory.
+Only files that do not already exist in the destination are copied. If a file with the same name is already there, it skips that file and gives feedback.
+You can modify the $sourceDirectories and $destinationDirectory paths according to your system's structure.
+
+Let me know if you need further adjustments!
+
+
+
+
+
+You said:
+now allow the $sourceDirectories to include all child folders in that directory
+ChatGPT said:
+GPT
+Sure! To include all child folders within a specified directory (i.e., make $sourceDirectories recursively look through the entire directory tree), we need to adjust the script so that it gathers all subdirectories of each source directory dynamically. This can be done using the Get-ChildItem cmdlet with the -Directory flag, and we'll ensure it retrieves all child directories recursively.
+
+Here's the updated version of the script that will automatically include all child directories of each source directory:
+
+powershell
+Copy code
+# Define the top-level directories to start with (including all child folders)
+$sourceDirectories = @(
+    "C:\Path\To\Parent\Directory1",
+    "C:\Path\To\Parent\Directory2"
+)
+
+# Define the destination directory
+$destinationDirectory = "C:\Path\To\Destination\Directory"
+
+# Define the output file to save the list of files copied
+$outputFile = "C:\Path\To\output.txt"
+
+# Clear or create the output file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+
+# Ensure destination directory exists, if not, create it
+if (-not (Test-Path $destinationDirectory)) {
+    New-Item -ItemType Directory -Path $destinationDirectory
+}
+
+# Loop through each top-level source directory
+foreach ($dir in $sourceDirectories) {
+    # Check if the top-level directory exists
+    if (Test-Path $dir) {
+        # Get all subdirectories (including the top-level directory itself)
+        $allSubDirs = Get-ChildItem -Path $dir -Recurse -Directory
+
+        # Add the top-level directory to the list as well
+        $allSubDirs = $allSubDirs + (Get-Item $dir)
+
+        # Now loop through each subdirectory (including the top-level one)
+        foreach ($subDir in $allSubDirs) {
+            # Get all files recursively in each subdirectory
+            Get-ChildItem -Path $subDir.FullName -Recurse -File | ForEach-Object {
+                $sourceFile = $_.FullName
+                $destinationFile = Join-Path -Path $destinationDirectory -ChildPath $_.Name
+
+                # Check if the file already exists in the destination
+                if (-not (Test-Path $destinationFile)) {
+                    # If it doesn't exist, copy the file to the destination
+                    Copy-Item -Path $sourceFile -Destination $destinationDirectory
+
+                    # Log the copied file path to the output file
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+
+                    Write-Host "Copied: $sourceFile to $destinationDirectory"
+                } else {
+                    Write-Host "File already exists: $destinationFile" -ForegroundColor Yellow
+                }
+            }
+        }
+    } else {
+        Write-Host "Source directory '$dir' does not exist!" -ForegroundColor Red
+    }
+}
+
+Write-Host "File copying complete. See $outputFile for a list of copied files."
+Key Changes:
+Get-ChildItem -Recurse -Directory: This command retrieves all child directories recursively. It's used to get a list of all subdirectories within the source directories.
+
+Get-Item $dir: Adds the top-level directory itself to the list of directories, so files directly within the top-level directory are processed too (not just files in its child folders).
+
+Looping through each subdirectory: For each subdirectory (including the top-level directory), the script processes all files recursively.
+
+File Copying: For each file found, the script checks if it exists in the destination directory. If not, it copies the file over.
+
+Example:
+If you have the following structure:
+
+mathematica
+Copy code
+C:\Path\To\Parent\Directory1
+    \SubDir1
+    \SubDir2
+C:\Path\To\Parent\Directory2
+    \SubDirA
+    \SubDirB
+The script will process files from:
+
+C:\Path\To\Parent\Directory1
+C:\Path\To\Parent\Directory1\SubDir1
+C:\Path\To\Parent\Directory1\SubDir2
+C:\Path\To\Parent\Directory2
+C:\Path\To\Parent\Directory2\SubDirA
+C:\Path\To\Parent\Directory2\SubDirB
+Output:
+If a file from any of these directories doesn’t exist in the $destinationDirectory, it will be copied and logged in the $outputFile.
+You can adjust the $sourceDirectories and $destinationDirectory variables to fit your environment.
+
+Let me know if you'd like more customization or clarification!
+
+
+
+
+
+You said:
+now change the script to use gsutil cp instead of copying the files
+ChatGPT said:
+GPT
+Ah, great! You're now looking to use gsutil cp (which is a Google Cloud Storage tool) to copy the files instead of using PowerShell's native Copy-Item cmdlet. To integrate gsutil into the PowerShell script, we'll essentially invoke the gsutil cp command within the script to copy files to a Google Cloud Storage bucket (or between directories managed by Google Cloud).
+
+Assuming you're using gsutil to copy files to a Google Cloud Storage bucket or another local/destination, here’s how the script would be adjusted:
+
+Adjusted PowerShell Script with gsutil cp:
+powershell
+Copy code
+# Define the list of source directories (including all child folders)
+$sourceDirectories = @(
+    "C:\Path\To\Parent\Directory1",
+    "C:\Path\To\Parent\Directory2"
+)
+
+# Define the destination GCS bucket or local directory (ensure it's properly formatted for gsutil)
+$destinationDirectory = "gs://your-bucket-name/destination-folder"
+
+# Define the output file to save the list of files copied
+$outputFile = "C:\Path\To\output.txt"
+
+# Clear or create the output file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+
+# Loop through each top-level source directory
+foreach ($dir in $sourceDirectories) {
+    # Check if the top-level directory exists
+    if (Test-Path $dir) {
+        # Get all subdirectories (including the top-level directory itself)
+        $allSubDirs = Get-ChildItem -Path $dir -Recurse -Directory
+
+        # Add the top-level directory to the list as well
+        $allSubDirs = $allSubDirs + (Get-Item $dir)
+
+        # Now loop through each subdirectory (including the top-level one)
+        foreach ($subDir in $allSubDirs) {
+            # Get all files recursively in each subdirectory
+            Get-ChildItem -Path $subDir.FullName -Recurse -File | ForEach-Object {
+                $sourceFile = $_.FullName
+                $destinationFile = Join-Path -Path $destinationDirectory -ChildPath $_.Name
+
+                # Construct the gsutil command to check if the file exists in the destination (using gsutil ls)
+                $checkFileExistsCmd = "gsutil ls $destinationFile"
+
+                # Execute the gsutil ls command and check if the file exists
+                $fileExists = Invoke-Expression $checkFileExistsCmd
+
+                if (-not $fileExists) {
+                    # If the file does not exist, use gsutil to copy it to the destination
+                    $copyCommand = "gsutil cp $sourceFile $destinationDirectory"
+
+                    # Execute the gsutil cp command
+                    Invoke-Expression $copyCommand
+
+                    # Log the copied file path to the output file
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+
+                    Write-Host "Copied: $sourceFile to $destinationDirectory"
+                } else {
+                    Write-Host "File already exists in destination: $destinationFile" -ForegroundColor Yellow
+                }
+            }
+        }
+    } else {
+        Write-Host "Source directory '$dir' does not exist!" -ForegroundColor Red
+    }
+}
+
+Write-Host "File copying complete. See $outputFile for a list of copied files."
+Explanation of Changes:
+Destination GCS Bucket:
+
+The $destinationDirectory is now a GCS bucket path (e.g., gs://your-bucket-name/destination-folder).
+gsutil ls:
+
+Before copying, we check if the file already exists in the GCS bucket by using gsutil ls $destinationFile. If it doesn’t return anything, we consider the file as not existing.
+gsutil cp:
+
+We replace the PowerShell Copy-Item command with a gsutil cp command to copy files from the source directories to the Google Cloud Storage destination.
+Invoke-Expression:
+
+This is used to run the gsutil commands (gsutil ls and gsutil cp) from within the PowerShell script. Invoke-Expression allows us to run external commands like gsutil.
+Logging:
+
+Just like before, it logs the copied files to the $outputFile for reference.
+Example:
+Let’s say you have the following:
+
+Source directories: C:\Path\To\Parent\Directory1 and C:\Path\To\Parent\Directory2
+GCS Bucket: gs://your-bucket-name/destination-folder
+The script will:
+
+Recursively look through all subdirectories and files in Directory1 and Directory2.
+Use gsutil ls to check if a file already exists in gs://your-bucket-name/destination-folder.
+If the file doesn’t exist, it will copy it using gsutil cp.
+Log all the copied files in the $outputFile.
+Important Notes:
+Make sure gsutil is installed and properly configured on the machine where this script will run. You need to have authenticated access to the GCS bucket.
+Google Cloud SDK: The script assumes you have set up the Google Cloud SDK (which includes gsutil) and are authenticated with a service account or OAuth token.
+Permissions: Ensure that your account or service account has sufficient permissions to read from the source and write to the GCS bucket.
+Let me know if you need further adjustments or more details!
+
+
+
+
+
+You said:
+now change the source directories to gcp buckets as well
+ChatGPT said:
+GPT
+Got it! You'd like to change the source directories to be Google Cloud Storage (GCS) buckets, and use gsutil cp to copy files between GCS buckets. This means both your source and destination are now GCS bucket paths.
+
+In this case, we'll leverage gsutil ls to list files in the source bucket and then use gsutil cp to copy files from the source GCS bucket to the destination GCS bucket, checking if the file already exists before copying.
+
+Here’s the updated PowerShell script that assumes both the source and destination are GCS buckets:
+
+PowerShell Script with GCS Buckets as Source and Destination:
+powershell
+Copy code
+# Define the list of source GCS buckets
+$sourceBuckets = @(
+    "gs://source-bucket-1/folder1/",
+    "gs://source-bucket-2/folder2/"
+)
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the output file to save the list of files copied
+$outputFile = "C:\Path\To\output.txt"
+
+# Clear or create the output file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Execute the gsutil ls command to get all files recursively
+    $sourceFiles = Invoke-Expression $listFilesCommand
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file path in the GCS bucket
+            $destinationFile = Join-Path -Path $destinationBucket -ChildPath $fileName
+
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFile"
+
+            # Execute the gsutil ls command to check if the file exists
+            $fileExists = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+
+            if (-not $fileExists) {
+                # If the file does not exist, use gsutil to copy it to the destination bucket
+                $copyCommand = "gsutil cp $sourceFile $destinationBucket"
+
+                # Execute the gsutil cp command to copy the file
+                Invoke-Expression $copyCommand
+
+                # Log the copied file path to the output file
+                $sourceFile | Out-File -FilePath $outputFile -Append
+
+                Write-Host "Copied: $sourceFile to $destinationBucket"
+            } else {
+                Write-Host "File already exists in destination: $destinationFile" -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
+Write-Host "File copying complete. See $outputFile for a list of copied files."
+Key Adjustments:
+Source Buckets:
+
+$sourceBuckets: This is an array of GCS bucket paths (e.g., gs://source-bucket-1/folder1/).
+Each source path is a GCS bucket, not a local directory.
+Listing Files with gsutil ls:
+
+gsutil ls -r $bucket: This lists all the files in each GCS bucket recursively.
+The output of this command will be captured and processed line-by-line to check if it's a valid file (i.e., excluding directory markers ending in /).
+Checking for File Existence:
+
+gsutil ls $destinationFile: This checks if the file already exists in the destination GCS bucket.
+If the file does not exist, it will proceed to copy the file; otherwise, it will skip it.
+Copying Files with gsutil cp:
+
+gsutil cp $sourceFile $destinationBucket: This command is used to copy the file from the source bucket to the destination bucket.
+Logging:
+
+As with previous versions of the script, the copied files are logged to $outputFile.
+Example:
+Let's say you have the following:
+
+Source GCS buckets:
+gs://source-bucket-1/folder1/ containing files like fileA.txt, fileB.jpg
+gs://source-bucket-2/folder2/ containing files like fileC.pdf, fileD.png
+Destination GCS bucket: gs://your-destination-bucket/destination-folder/
+The script will:
+
+Recursively list all files in both gs://source-bucket-1/folder1/ and gs://source-bucket-2/folder2/.
+For each file, it will check if the file already exists in gs://your-destination-bucket/destination-folder/.
+If the file doesn't exist, it will be copied to the destination bucket.
+All copied files are logged in the $outputFile.
+Important Notes:
+Make sure gsutil is installed and properly configured on the machine where this script runs. You need to have authenticated access to both the source and destination GCS buckets.
+Google Cloud SDK: Ensure that Google Cloud SDK is installed and you are authenticated (using a service account or your Google account) to manage the GCS buckets.
+Permissions: Ensure that the account used to execute this script has read access to the source buckets and write access to the destination bucket.
+Let me know if you need further clarification or additional customization!
+
+
+
+
+
+You said:
+now add a log file to document which files are copied over, which already exist and any errors that arise
+ChatGPT said:
+GPT
+Sure! To add more detailed logging, including which files were copied, which already exist, and any errors that occur during execution, we can enhance the script to log these events to a separate log file.
+
+Here’s how we can modify the script to:
+
+Log successfully copied files.
+Log files that already exist.
+Log any errors that may occur during the process.
+Enhanced PowerShell Script with Logging:
+powershell
+Copy code
+# Define the list of source GCS buckets
+$sourceBuckets = @(
+    "gs://source-bucket-1/folder1/",
+    "gs://source-bucket-2/folder2/"
+)
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the output file to save the list of copied files
+$outputFile = "C:\Path\To\copied_files.txt"
+
+# Define the log file to document actions and errors
+$logFile = "C:\Path\To\file_transfer_log.txt"
+
+# Clear or create the output file and log file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+Clear-Content $logFile -ErrorAction SilentlyContinue
+
+# Function to log messages to the log file
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default log type is INFO
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+    
+    # Write the message to the log file
+    $logMessage | Out-File -FilePath $logFile -Append
+}
+
+# Start the process and log
+Write-Log "Starting file transfer process..."
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket $bucket: $_" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file path in the GCS bucket
+            $destinationFile = Join-Path -Path $destinationBucket -ChildPath $fileName
+
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFile"
+
+            # Try to check if the file exists in the destination bucket
+            try {
+                $fileExists = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+            } catch {
+                Write-Log "Error checking existence of file $destinationFile: $_" -type "ERROR"
+                continue
+            }
+
+            if (-not $fileExists) {
+                # If the file does not exist, use gsutil to copy it to the destination bucket
+                $copyCommand = "gsutil cp $sourceFile $destinationBucket"
+
+                # Try to copy the file and catch any errors
+                try {
+                    Invoke-Expression $copyCommand
+
+                    # Log the copied file path to the output file
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+                    Write-Log "Copied file: $sourceFile to $destinationBucket"
+                } catch {
+                    Write-Log "Error copying file $sourceFile: $_" -type "ERROR"
+                }
+            } else {
+                # Log that the file already exists
+                Write-Log "File already exists: $destinationFile" -type "WARNING"
+            }
+        }
+    }
+}
+
+Write-Log "File transfer process completed."
+Write-Host "File transfer complete. Check $logFile for details and $outputFile for copied files."
+Key Changes:
+Logging Function (Write-Log):
+
+A Write-Log function is added to handle logging. It takes two parameters: message and type. By default, the log type is set to "INFO", but you can also log "ERROR" and "WARNING" messages.
+Logs are written with a timestamp and the log type (e.g., INFO, WARNING, ERROR).
+All logs are saved to the $logFile for review.
+Detailed Logging:
+
+Copied Files: When a file is successfully copied, it logs both to the $outputFile and to the log file with an "INFO" message.
+Existing Files: If a file already exists in the destination bucket, a "WARNING" log is written.
+Errors: If any errors occur (e.g., errors during listing files, checking file existence, or copying), they are logged with the "ERROR" type, including the error details.
+Try-Catch for Error Handling:
+
+The script now wraps critical operations (gsutil ls, gsutil cp) in try-catch blocks to catch any errors that might occur during listing files, checking existence, or copying files.
+If an error occurs, it's logged, and the script continues processing the next file.
+Clearing or Creating Output and Log Files:
+
+The script uses Clear-Content to ensure that the $outputFile and $logFile are empty when the script starts. This prevents appending to old logs/output from previous runs.
+Example Log Output:
+The $logFile might look like this:
+
+arduino
+Copy code
+2024-09-19 12:00:01 [INFO] Starting file transfer process...
+2024-09-19 12:00:02 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to gs://your-destination-bucket/destination-folder
+2024-09-19 12:00:03 [WARNING] File already exists: gs://your-destination-bucket/destination-folder/fileB.jpg
+2024-09-19 12:00:04 [ERROR] Error copying file gs://source-bucket-2/folder2/fileC.pdf: Some error message here
+2024-09-19 12:00:05 [INFO] File transfer process completed.
+Important Notes:
+Destination and Source Paths: Make sure that your source and destination bucket paths are correctly set, e.g., gs://your-bucket-name/folder/.
+Google Cloud SDK: Ensure that Google Cloud SDK is installed, gsutil is configured, and you're authenticated properly with the necessary permissions to access both the source and destination buckets.
+Permissions: The account or service account used must have read access to the source buckets and write access to the destination bucket.
+Files Created:
+$outputFile: Logs the list of files that were successfully copied.
+$logFile: Logs all actions, warnings, and errors.
+Let me know if you need more customization or further clarification!
+
+
+
+
+
+You said:
+now attach a psdrive named X for UNC share \\gcp\drive\here\ and have it be another destination to which the files are copied  
+ChatGPT said:
+GPT
+Great! You'd like to add a new destination for file copying, specifically a network share (UNC path), by attaching it as a PSDrive (mapped to a drive letter, in this case, X:). This will allow us to copy files both to a GCS bucket and to a network share.
+
+We'll modify the script to:
+
+Attach the PSDrive (X:) to the UNC path (e.g., \\gcp\drive\here\).
+Copy the files to both the Google Cloud Storage (GCS) bucket and the X: drive.
+Continue using logging to track all file copies, including those to the network share.
+PowerShell Script with GCS Bucket and Network Share as Destinations:
+powershell
+Copy code
+# Define the list of source GCS buckets
+$sourceBuckets = @(
+    "gs://source-bucket-1/folder1/",
+    "gs://source-bucket-2/folder2/"
+)
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the UNC path for the network share (PSDrive X:)
+$networkShareUNC = "\\gcp\drive\here"
+
+# Define the output file to save the list of copied files
+$outputFile = "C:\Path\To\copied_files.txt"
+
+# Define the log file to document actions and errors
+$logFile = "C:\Path\To\file_transfer_log.txt"
+
+# Clear or create the output file and log file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+Clear-Content $logFile -ErrorAction SilentlyContinue
+
+# Function to log messages to the log file
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default log type is INFO
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+    
+    # Write the message to the log file
+    $logMessage | Out-File -FilePath $logFile -Append
+}
+
+# Mount the UNC path as a PSDrive named 'X:'
+if (-not (Get-PSDrive -Name X -ErrorAction SilentlyContinue)) {
+    try {
+        New-PSDrive -Name "X" -PSProvider "FileSystem" -Root $networkShareUNC -Persist
+        Write-Log "PSDrive X: mounted for $networkShareUNC"
+    } catch {
+        Write-Log "Error mounting PSDrive X: for $networkShareUNC: $_" -type "ERROR"
+        exit
+    }
+} else {
+    Write-Log "PSDrive X: already exists."
+}
+
+# Start the process and log
+Write-Log "Starting file transfer process..."
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket $bucket: $_" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file paths in the GCS bucket and the PSDrive
+            $destinationFileGCS = Join-Path -Path $destinationBucket -ChildPath $fileName
+            $destinationFileUNC = "X:\" + $fileName
+
+            ##### Copy to GCS Bucket #####
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFileGCS"
+
+            # Try to check if the file exists in the destination bucket
+            try {
+                $fileExistsGCS = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+            } catch {
+                Write-Log "Error checking existence of file $destinationFileGCS: $_" -type "ERROR"
+                continue
+            }
+
+            # If the file doesn't exist, copy it to the GCS bucket
+            if (-not $fileExistsGCS) {
+                $copyCommandGCS = "gsutil cp $sourceFile $destinationBucket"
+
+                try {
+                    Invoke-Expression $copyCommandGCS
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+                    Write-Log "Copied file: $sourceFile to $destinationBucket"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to GCS: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in GCS: $destinationFileGCS" -type "WARNING"
+            }
+
+            ##### Copy to Network Share (X:) #####
+            # Check if the file already exists in the PSDrive (network share)
+            if (-not (Test-Path $destinationFileUNC)) {
+                try {
+                    Copy-Item $sourceFile $destinationFileUNC
+                    Write-Log "Copied file: $sourceFile to X: ($networkShareUNC)"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to network share: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in network share: X: ($destinationFileUNC)" -type "WARNING"
+            }
+        }
+    }
+}
+
+Write-Log "File transfer process completed."
+Write-Host "File transfer complete. Check $logFile for details and $outputFile for copied files."
+Key Modifications:
+Mount the PSDrive (X:):
+
+New-PSDrive is used to attach the UNC share (\\gcp\drive\here) as X:. This is mounted only if it hasn't already been attached.
+The -Persist option ensures that the PSDrive is mapped persistently, which means it will be available across sessions.
+Check for Existing Files in Network Share (X:):
+
+After copying to the GCS bucket, the script checks if the file already exists in the network share using Test-Path to check if the file is already in the X: drive.
+If the file doesn't exist, the script copies the file from the GCS bucket to the network share (X:).
+Logging:
+
+Logs are created for the following events:
+Successful mount of the network share as X:.
+Copying files to the GCS bucket and network share.
+File already exists warnings for both destinations.
+Errors during file copying or any issue with mounting the PSDrive.
+Handling File Paths:
+
+The destination for the network share is handled as X:\<fileName>.
+The destination for GCS remains gs://your-destination-bucket/destination-folder/<fileName>.
+Example Workflow:
+The script starts by attaching the UNC path \\gcp\drive\here as the X: drive.
+It then loops through the GCS source buckets and lists the files.
+For each file:
+It checks if the file already exists in the GCS bucket and the X: network share.
+If the file doesn't exist, it copies the file to both destinations.
+All actions (copying, errors, and warnings) are logged to the $logFile.
+The list of successfully copied files is saved in $outputFile.
+Example Log Output:
+The $logFile might look like this:
+
+arduino
+Copy code
+2024-09-19 12:00:01 [INFO] Starting file transfer process...
+2024-09-19 12:00:02 [INFO] PSDrive X: mounted for \\gcp\drive\here
+2024-09-19 12:00:03 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to gs://your-destination-bucket/destination-folder
+2024-09-19 12:00:04 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to X: (\\gcp\drive\here)
+2024-09-19 12:00:05 [WARNING] File already exists in GCS: gs://your-destination-bucket/destination-folder/fileB.jpg
+2024-09-19 12:00:06 [WARNING] File already exists in network share: X:\fileB.jpg
+2024-09-19 12:00:07 [ERROR] Error copying file gs://source-bucket-2/folder2/fileC.pdf to network share: Some error message
+2024-09-19 12:00:08 [INFO] File transfer process completed.
+Notes:
+Permissions: Make sure that you have the appropriate permissions to access both the GCS bucket and the network share. This may require setting up appropriate access credentials for the network share and using service accounts
+
+
+
+
+You said:
+now read the sourceBuckets from a txt file and each bucket in "" and separated but a comma and new line
+ChatGPT said:
+GPT
+Absolutely! To read the sourceBuckets from a .txt file where each bucket is enclosed in quotes (") and separated by commas (,) and new lines, we can adjust the script to:
+
+Load the list of buckets from the text file.
+Split the content of the file into individual bucket paths.
+Example of buckets.txt (the input file):
+arduino
+Copy code
+"gs://source-bucket-1/folder1/",
+"gs://source-bucket-2/folder2/",
+"gs://source-bucket-3/folder3/"
+Updated PowerShell Script to Read Buckets from a .txt File:
+powershell
+Copy code
+# Path to the text file that contains the source buckets
+$bucketFilePath = "C:\Path\To\buckets.txt"
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the UNC path for the network share (PSDrive X:)
+$networkShareUNC = "\\gcp\drive\here"
+
+# Define the output file to save the list of copied files
+$outputFile = "C:\Path\To\copied_files.txt"
+
+# Define the log file to document actions and errors
+$logFile = "C:\Path\To\file_transfer_log.txt"
+
+# Clear or create the output file and log file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+Clear-Content $logFile -ErrorAction SilentlyContinue
+
+# Function to log messages to the log file
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default log type is INFO
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+    
+    # Write the message to the log file
+    $logMessage | Out-File -FilePath $logFile -Append
+}
+
+# Mount the UNC path as a PSDrive named 'X:'
+if (-not (Get-PSDrive -Name X -ErrorAction SilentlyContinue)) {
+    try {
+        New-PSDrive -Name "X" -PSProvider "FileSystem" -Root $networkShareUNC -Persist
+        Write-Log "PSDrive X: mounted for $networkShareUNC"
+    } catch {
+        Write-Log "Error mounting PSDrive X: for $networkShareUNC: $_" -type "ERROR"
+        exit
+    }
+} else {
+    Write-Log "PSDrive X: already exists."
+}
+
+# Read the source buckets from the text file
+try {
+    $bucketFileContent = Get-Content -Path $bucketFilePath -Raw
+    Write-Log "Successfully read source buckets from $bucketFilePath"
+} catch {
+    Write-Log "Error reading the bucket file: $_" -type "ERROR"
+    exit
+}
+
+# Clean the content: remove quotes and split by commas, trim any whitespace
+$sourceBuckets = $bucketFileContent -replace '"', '' -split ',' | ForEach-Object { $_.Trim() }
+
+# Start the process and log
+Write-Log "Starting file transfer process..."
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket $bucket: $_" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file paths in the GCS bucket and the PSDrive
+            $destinationFileGCS = Join-Path -Path $destinationBucket -ChildPath $fileName
+            $destinationFileUNC = "X:\" + $fileName
+
+            ##### Copy to GCS Bucket #####
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFileGCS"
+
+            # Try to check if the file exists in the destination bucket
+            try {
+                $fileExistsGCS = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+            } catch {
+                Write-Log "Error checking existence of file $destinationFileGCS: $_" -type "ERROR"
+                continue
+            }
+
+            # If the file doesn't exist, copy it to the GCS bucket
+            if (-not $fileExistsGCS) {
+                $copyCommandGCS = "gsutil cp $sourceFile $destinationBucket"
+
+                try {
+                    Invoke-Expression $copyCommandGCS
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+                    Write-Log "Copied file: $sourceFile to $destinationBucket"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to GCS: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in GCS: $destinationFileGCS" -type "WARNING"
+            }
+
+            ##### Copy to Network Share (X:) #####
+            # Check if the file already exists in the PSDrive (network share)
+            if (-not (Test-Path $destinationFileUNC)) {
+                try {
+                    Copy-Item $sourceFile $destinationFileUNC
+                    Write-Log "Copied file: $sourceFile to X: ($networkShareUNC)"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to network share: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in network share: X: ($destinationFileUNC)" -type "WARNING"
+            }
+        }
+    }
+}
+
+Write-Log "File transfer process completed."
+Write-Host "File transfer complete. Check $logFile for details and $outputFile for copied files."
+Changes Explained:
+Reading Source Buckets from a Text File (buckets.txt):
+
+The Get-Content cmdlet reads the entire content of the buckets.txt file.
+The -Raw flag is used to ensure that the entire file is read as a single string.
+The string is then processed with -replace '"', '' to remove the double quotes (") and split by commas (,).
+Each resulting bucket is trimmed of any leading or trailing whitespace using the Trim() method.
+Example Content of buckets.txt: The text file should be formatted as follows:
+
+txt
+Copy code
+"gs://source-bucket-1/folder1/",
+"gs://source-bucket-2/folder2/",
+"gs://source-bucket-3/folder3/"
+The script will extract each bucket path and remove the quotes.
+
+Error Handling:
+
+If there is an error reading the buckets.txt file, the script logs an error and exits.
+Proper logging is included for all other operations, including mounting the PSDrive, copying files, and handling errors.
+Log File and Output File:
+
+The log file ($logFile) keeps track of all actions, warnings, and errors.
+The output file ($outputFile) lists files successfully copied to the destination.
+How It Works:
+The script starts by reading the list of source GCS buckets from buckets.txt.
+It then iterates through each bucket, listing all files in the bucket.
+For each file, it:
+Copies it to the destination GCS bucket if it doesn't already exist.
+Copies it to the network share (X:) if it doesn't already exist there.
+Logs are generated for each step of the process, including any errors, warnings for already existing files, and successful file copies.
+Example Log Output:
+The $logFile might look like this:
+
+yaml
+Copy code
+2024-09-19 12:00:01 [INFO] Starting file transfer process...
+2024-09-19 12:00:02 [INFO] Successfully read source buckets from C:\Path\To\buckets.txt
+2024-09-19 12:00:03 [INFO] PSDrive X: mounted for \\gcp\drive\here
+2024-09-19 12:00:04 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to gs://your-destination-bucket/destination-folder
+2024-09-19 12:00:05 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to X: (\\gcp\drive\here)
+2024-09-19 12:00:06 [WARNING] File already exists in GCS: gs://your-destination-bucket/destination-folder/fileB.jpg
+2024-09-19 12:00:07 [WARNING] File already exists in network share: X:\fileB.jpg
+2024-09-19 12:00
+
+
+
+
+You said:
+now make the copy to the Network share happen before the copy to the destination bucket
+ChatGPT said:
+GPT
+Sure! To make the copy to the network share (X: drive) happen before the copy to the Google Cloud Storage (GCS) bucket, we simply need to rearrange the order of operations within the loop. Specifically, we will:
+
+Copy the file to the network share first.
+Then copy the file to the GCS bucket.
+Here is the updated script with the copy to the network share (X:) happening first:
+
+Updated PowerShell Script:
+powershell
+Copy code
+# Path to the text file that contains the source buckets
+$bucketFilePath = "C:\Path\To\buckets.txt"
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the UNC path for the network share (PSDrive X:)
+$networkShareUNC = "\\gcp\drive\here"
+
+# Define the output file to save the list of copied files
+$outputFile = "C:\Path\To\copied_files.txt"
+
+# Define the log file to document actions and errors
+$logFile = "C:\Path\To\file_transfer_log.txt"
+
+# Clear or create the output file and log file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+Clear-Content $logFile -ErrorAction SilentlyContinue
+
+# Function to log messages to the log file
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default log type is INFO
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+    
+    # Write the message to the log file
+    $logMessage | Out-File -FilePath $logFile -Append
+}
+
+# Mount the UNC path as a PSDrive named 'X:'
+if (-not (Get-PSDrive -Name X -ErrorAction SilentlyContinue)) {
+    try {
+        New-PSDrive -Name "X" -PSProvider "FileSystem" -Root $networkShareUNC -Persist
+        Write-Log "PSDrive X: mounted for $networkShareUNC"
+    } catch {
+        Write-Log "Error mounting PSDrive X: for $networkShareUNC: $_" -type "ERROR"
+        exit
+    }
+} else {
+    Write-Log "PSDrive X: already exists."
+}
+
+# Read the source buckets from the text file
+try {
+    $bucketFileContent = Get-Content -Path $bucketFilePath -Raw
+    Write-Log "Successfully read source buckets from $bucketFilePath"
+} catch {
+    Write-Log "Error reading the bucket file: $_" -type "ERROR"
+    exit
+}
+
+# Clean the content: remove quotes and split by commas, trim any whitespace
+$sourceBuckets = $bucketFileContent -replace '"', '' -split ',' | ForEach-Object { $_.Trim() }
+
+# Start the process and log
+Write-Log "Starting file transfer process..."
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket $bucket: $_" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file paths in the GCS bucket and the PSDrive
+            $destinationFileUNC = "X:\" + $fileName
+            $destinationFileGCS = Join-Path -Path $destinationBucket -ChildPath $fileName
+
+            ##### Copy to Network Share (X:) FIRST #####
+            # Check if the file already exists in the PSDrive (network share)
+            if (-not (Test-Path $destinationFileUNC)) {
+                try {
+                    Copy-Item $sourceFile $destinationFileUNC
+                    Write-Log "Copied file: $sourceFile to X: ($networkShareUNC)"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to network share: $_" -type "ERROR"
+                    continue  # If an error occurs, continue to the next file
+                }
+            } else {
+                Write-Log "File already exists in network share: X: ($destinationFileUNC)" -type "WARNING"
+            }
+
+            ##### Copy to GCS Bucket SECOND #####
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFileGCS"
+
+            # Try to check if the file exists in the destination bucket
+            try {
+                $fileExistsGCS = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+            } catch {
+                Write-Log "Error checking existence of file $destinationFileGCS: $_" -type "ERROR"
+                continue
+            }
+
+            # If the file doesn't exist, copy it to the GCS bucket
+            if (-not $fileExistsGCS) {
+                $copyCommandGCS = "gsutil cp $sourceFile $destinationBucket"
+
+                try {
+                    Invoke-Expression $copyCommandGCS
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+                    Write-Log "Copied file: $sourceFile to $destinationBucket"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to GCS: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in GCS: $destinationFileGCS" -type "WARNING"
+            }
+        }
+    }
+}
+
+Write-Log "File transfer process completed."
+Write-Host "File transfer complete. Check $logFile for details and $outputFile for copied files."
+Key Changes:
+Order of Operations:
+
+The block of code for copying to the network share (X:) is now placed before the block that handles copying to the Google Cloud Storage (GCS) bucket.
+The script checks if the file already exists in the network share (X:) and copies it there first.
+After that, it checks if the file exists in the GCS bucket and performs the copy to the GCS bucket only if necessary.
+Error Handling:
+
+If an error occurs while copying to the network share (X:), the script logs the error and continues to the next file without attempting the GCS bucket copy for that file.
+If an error occurs while copying to the GCS bucket, it logs the error but continues processing other files.
+Order of Execution:
+
+Step 1: Copy to the network share (X: drive).
+Step 2: If the copy to the network share is successful (or the file already exists), proceed to check and copy the file to the GCS bucket.
+Example Log Output:
+The $logFile might look like this:
+
+bash
+Copy code
+2024-09-19 12:00:01 [INFO] Starting file transfer process...
+2024-09-19 12:00:02 [INFO] Successfully read source buckets from C:\Path\To\buckets.txt
+2024-09-19 12:00:03 [INFO] PSDrive X: mounted for \\gcp\drive\here
+2024-09-19 12:00:04 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to X: (\\gcp\drive\here)
+2024-09-19 12:00:05 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to gs://your-destination-bucket/destination-folder
+2024-09-19 12:00:06 [WARNING] File already exists in network share: X:\fileB.jpg
+2024-09-19 12:00:07 [INFO] Copied file: gs://source-bucket-1/folder1/fileB.jpg to gs://your-destination-bucket/destination-folder
+2024-09-19 12:00:08 [ERROR] Error copying file gs://source-bucket-2/folder2/fileC.pdf to network share: Some error message
+2024-09-19 12:00:09 [INFO] File transfer process completed.
+Important Considerations:
+Network Share Priority:
+
+The network share copy happens first. If there is an issue copying to the network share, the script logs the error and skips any subsequent attempts to copy that file to the GCS bucket.
+Log Files:
+
+The log file ($logFile) keeps a detailed record of every action taken, including successful copies, existing files, and any errors encountered during the process.
+Flow:
+
+Network Share First: Copies files to X: first.
+GCS Copy Second: If the file is copied (or already exists in
+
+
+
+
+You said:
+now make sure that the copy to the network share will append a number if the file already exists so it doesn't overwrite the existing file
+ChatGPT said:
+GPT
+To ensure that files copied to the network share (X: drive) don't overwrite existing files, we need to modify the script to append a number to the filename if the file already exists. This behavior can be implemented by checking whether the file exists in the destination and, if so, incrementing a number until we find a filename that doesn't already exist.
+
+Here's how we can modify the script:
+
+Updated PowerShell Script with Filename Appending in Network Share:
+powershell
+Copy code
+# Path to the text file that contains the source buckets
+$bucketFilePath = "C:\Path\To\buckets.txt"
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the UNC path for the network share (PSDrive X:)
+$networkShareUNC = "\\gcp\drive\here"
+
+# Define the output file to save the list of copied files
+$outputFile = "C:\Path\To\copied_files.txt"
+
+# Define the log file to document actions and errors
+$logFile = "C:\Path\To\file_transfer_log.txt"
+
+# Clear or create the output file and log file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+Clear-Content $logFile -ErrorAction SilentlyContinue
+
+# Function to log messages to the log file
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default log type is INFO
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+    
+    # Write the message to the log file
+    $logMessage | Out-File -FilePath $logFile -Append
+}
+
+# Function to get a unique filename if a file already exists in the destination
+function Get-UniqueFileName {
+    param (
+        [string]$filePath
+    )
+
+    # Split the file path into directory, file base name, and extension
+    $directory = [System.IO.Path]::GetDirectoryName($filePath)
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($filePath)
+    $extension = [System.IO.Path]::GetExtension($filePath)
+    
+    # Initialize a counter
+    $counter = 1
+    $newFilePath = $filePath
+
+    # Check if the file already exists, and append a counter if necessary
+    while (Test-Path $newFilePath) {
+        $newFilePath = Join-Path -Path $directory -ChildPath ("{0}({1}){2}" -f $baseName, $counter, $extension)
+        $counter++
+    }
+
+    # Return the unique file path
+    return $newFilePath
+}
+
+# Mount the UNC path as a PSDrive named 'X:'
+if (-not (Get-PSDrive -Name X -ErrorAction SilentlyContinue)) {
+    try {
+        New-PSDrive -Name "X" -PSProvider "FileSystem" -Root $networkShareUNC -Persist
+        Write-Log "PSDrive X: mounted for $networkShareUNC"
+    } catch {
+        Write-Log "Error mounting PSDrive X: for $networkShareUNC: $_" -type "ERROR"
+        exit
+    }
+} else {
+    Write-Log "PSDrive X: already exists."
+}
+
+# Read the source buckets from the text file
+try {
+    $bucketFileContent = Get-Content -Path $bucketFilePath -Raw
+    Write-Log "Successfully read source buckets from $bucketFilePath"
+} catch {
+    Write-Log "Error reading the bucket file: $_" -type "ERROR"
+    exit
+}
+
+# Clean the content: remove quotes and split by commas, trim any whitespace
+$sourceBuckets = $bucketFileContent -replace '"', '' -split ',' | ForEach-Object { $_.Trim() }
+
+# Start the process and log
+Write-Log "Starting file transfer process..."
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket $bucket: $_" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file paths in the GCS bucket and the PSDrive
+            $destinationFileUNC = "X:\" + $fileName
+            $destinationFileGCS = Join-Path -Path $destinationBucket -ChildPath $fileName
+
+            ##### Copy to Network Share (X:) FIRST #####
+            # Check if the file already exists in the PSDrive (network share)
+            if (Test-Path $destinationFileUNC) {
+                # If the file already exists, get a unique file name
+                $destinationFileUNC = Get-UniqueFileName -filePath $destinationFileUNC
+                Write-Log "File already exists in network share, using new name: $destinationFileUNC" -type "WARNING"
+            }
+
+            try {
+                Copy-Item $sourceFile $destinationFileUNC
+                Write-Log "Copied file: $sourceFile to X: ($networkShareUNC)"
+            } catch {
+                Write-Log "Error copying file $sourceFile to network share: $_" -type "ERROR"
+                continue  # If an error occurs, continue to the next file
+            }
+
+            ##### Copy to GCS Bucket SECOND #####
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFileGCS"
+
+            # Try to check if the file exists in the destination bucket
+            try {
+                $fileExistsGCS = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+            } catch {
+                Write-Log "Error checking existence of file $destinationFileGCS: $_" -type "ERROR"
+                continue
+            }
+
+            # If the file doesn't exist, copy it to the GCS bucket
+            if (-not $fileExistsGCS) {
+                $copyCommandGCS = "gsutil cp $sourceFile $destinationBucket"
+
+                try {
+                    Invoke-Expression $copyCommandGCS
+                    $sourceFile | Out-File -FilePath $outputFile -Append
+                    Write-Log "Copied file: $sourceFile to $destinationBucket"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to GCS: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in GCS: $destinationFileGCS" -type "WARNING"
+            }
+        }
+    }
+}
+
+Write-Log "File transfer process completed."
+Write-Host "File transfer complete. Check $logFile for details and $outputFile for copied files."
+Key Changes:
+Get-UniqueFileName Function:
+
+This function checks whether a file with the specified name already exists in the network share (X: drive).
+If the file exists, it appends a number (e.g., (1), (2), etc.) to the filename until it finds a unique filename that doesn't already exist.
+It splits the filename into a base name and extension, and then it constructs a new filename with a counter if needed.
+Copy to Network Share with Unique Filenames:
+
+The script first checks if the file already exists in the network share (X: drive).
+If the file exists, it uses the Get-UniqueFileName function to generate a unique filename by appending a number.
+The file is then copied with the new, unique name.
+Logging:
+
+If a file is renamed to avoid overwriting, a warning is logged, showing the original filename and the new unique filename.
+All other operations (successful copies, errors, existing files) are also logged.
+
+
+Example Log Output:
+The $logFile might look like this:
+
+2024-09-19 12:00:01 [INFO] Starting file transfer process...
+2024-09-19 12:00:02 [INFO] Successfully read source buckets from C:\Path\To\buckets.txt
+2024-09-19 12:00:03 [INFO] PSDrive X: mounted for \\gcp\drive\here
+2024-09-19 12:00:04 [WARNING] File already exists in network share, using new name: X:\fileA(1).txt
+2024-09-19 12:00:05 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to X: (\\gcp\drive\here)
+2024-09-19 12:00:06 [INFO] Copied file: gs://source-bucket-1/folder1/fileA.txt to gs://your-destination-bucket/destination-folder
