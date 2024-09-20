@@ -1,0 +1,212 @@
+# Path to the text file that contains the source buckets
+$bucketFilePath = "C:\Path\To\buckets.txt"
+
+# Define the destination GCS bucket
+$destinationBucket = "gs://your-destination-bucket/destination-folder"
+
+# Define the UNC path for the network share (PSDrive X:)
+$networkShareUNC = "\\gcp\drive\here"
+
+# Get the current date and time and format it for the log filename
+$dateTime = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+
+# Define the output file to save the list of copied files
+$outputFile = "C:\Path\To\copied_files.txt"
+
+# Define the log file with date and time in the filename
+$logFile = "C:\Path\To\Logs\file_transfer_log_$dateTime.txt"
+
+# Clear or create the output file and log file
+Clear-Content $outputFile -ErrorAction SilentlyContinue
+
+# Create the log file (ensure it's empty when the script starts)
+Set-Content $logFile -Value ""
+
+# Function to log messages to the log file
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default log type is INFO
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+
+    # Use Add-Content to append the log message directly to the log file
+    Add-Content -Path $logFile -Value $logMessage
+}
+
+# Function to get a unique filename if a file already exists in the destination
+function Get-UniqueFileName {
+    param (
+        [string]$filePath
+    )
+
+    # Split the file path into directory, file base name, and extension
+    $directory = [System.IO.Path]::GetDirectoryName($filePath)
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($filePath)
+    $extension = [System.IO.Path]::GetExtension($filePath)
+    
+    # Initialize a counter
+    $counter = 1
+    $newFilePath = $filePath
+
+    # Check if the file already exists, and append a counter if necessary
+    while (Test-Path $newFilePath) {
+        $newFilePath = Join-Path -Path $directory -ChildPath ("{0}({1}){2}" -f $baseName, $counter, $extension)
+        $counter++
+    }
+
+    # Return the unique file path
+    return $newFilePath
+}
+
+# Mount the UNC path as a PSDrive named 'X:'
+if (-not (Get-PSDrive -Name X -ErrorAction SilentlyContinue)) {
+    try {
+        New-PSDrive -Name "X" -PSProvider "FileSystem" -Root $networkShareUNC -Persist
+        Write-Log "PSDrive X: mounted for $networkShareUNC"
+    } catch {
+        Write-Log "Error mounting PSDrive X: for $networkShareUNC: $_" -type "ERROR"
+        exit
+    }
+} else {
+    Write-Log "PSDrive X: already exists."
+}
+
+# Read the source buckets from the text file
+try {
+    $bucketFileContent = Get-Content -Path $bucketFilePath -Raw
+    Write-Log "Successfully read source buckets from $bucketFilePath"
+} catch {
+    Write-Log "Error reading the bucket file: $_" -type "ERROR"
+    exit
+}
+
+# Clean the content: remove quotes and split by commas, trim any whitespace
+$sourceBuckets = $bucketFileContent -replace '"', '' -split ',' | ForEach-Object { $_.Trim() }
+
+# Start the process and log
+Write-Log "Starting file transfer process..."
+
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket $bucket: $_" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Remove any empty entries or directory paths (ending in "/")
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            # Extract the file name from the full source file path
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+
+            # Construct the full destination file paths in the GCS bucket and the PSDrive
+            $destinationFileUNC = "X:\" + $fileName
+            $destinationFileGCS = Join-Path -Path $destinationBucket -ChildPath $fileName
+
+            ##### Copy to Network Share (X:) FIRST #####
+            # Check if the file already exists in the PSDrive (network share)
+            $originalFileName = $destinationFileUNC  # Store the original filename for logging
+            if (Test-Path $destinationFileUNC) {
+                # If the file already exists, get a unique file name
+                $destinationFileUNC = Get-UniqueFileName -filePath $destinationFileUNC
+                Write-Log "File already exists in network share: $originalFileName. New name: $destinationFileUNC" -type "INFO"
+                Write-Log "Note: A number was appended to the filename to avoid overwriting." -type "INFO"
+            }
+
+            try {
+                Copy-Item $sourceFile $destinationFileUNC
+                Write-Log "Copied file: $sourceFile to X: ($networkShareUNC)"
+            } catch {
+                Write-Log "Error copying file $sourceFile to network share: $_" -type "ERROR"
+                continue  # If an error occurs, continue to the next file
+            }
+
+            ##### Copy to GCS Bucket SECOND #####
+            # Construct the gsutil command to check if the file exists in the destination bucket
+            $checkFileExistsCmd = "gsutil ls $destinationFileGCS"
+
+            # Try to check if the file exists in the destination bucket
+            try {
+                $fileExistsGCS = Invoke-Expression $checkFileExistsCmd -ErrorAction SilentlyContinue
+            } catch {
+                Write-Log "Error checking existence of file $destinationFileGCS: $_" -type "ERROR"
+                continue
+            }
+
+            # If the file doesn't exist, copy it to the GCS bucket
+            if (-not $fileExistsGCS) {
+                $copyCommandGCS = "gsutil cp $sourceFile $destinationBucket"
+
+                try {
+                    Invoke-Expression $copyCommandGCS
+                    Add-Content -Path $outputFile -Value $sourceFile
+                    Write-Log "Copied file: $sourceFile to $destinationBucket"
+                } catch {
+                    Write-Log "Error copying file $sourceFile to GCS: $_" -type "ERROR"
+                }
+            } else {
+                Write-Log "File already exists in GCS: $destinationFileGCS" -type "WARNING"
+            }
+        }
+    }
+}
+
+Write-Log "File transfer process completed."
+Write-Host "File transfer complete. Check $logFile for details and $outputFile for copied files."
+---------------------------------------------------------
+Key Points:
+Add-Content:
+    Add-Content is used to append the log message directly to the log file without any character spacing issues.
+No Piping:
+    We're avoiding piping (|) when writing log messages to avoid treating strings as character arrays, which is often the cause of the extra spacing issue.
+UTF8 Encoding:
+    If you need specific encoding (e.g., UTF8), you can specify it explicitly with Out-File if needed:
+        $logMessage | Out-File -FilePath $logFile -Append -Encoding UTF8
+    However, Add-Content should work fine in most cases without extra encoding parameters.
+---------------------------------------------------------
+# Loop through each source GCS bucket
+foreach ($bucket in $sourceBuckets) {
+    # List all files in the source bucket
+    $listFilesCommand = "gsutil ls -r $bucket"
+    
+    # Try to execute the gsutil ls command and catch any errors
+    try {
+        $sourceFiles = Invoke-Expression $listFilesCommand
+    } catch {
+        Write-Log "Error listing files in bucket ${bucket}: ${_}" -type "ERROR"
+        continue
+    }
+
+    # Split the list by newlines to handle multiple files
+    $fileList = $sourceFiles -split "`n"
+
+    # Loop through each file found in the source bucket
+    foreach ($sourceFile in $fileList) {
+        # Your existing logic for processing files
+    }
+}
+---------------------------------------------------------
+  Additional Recommendation:
+If the error is occurring due to something specific with $bucket itself (such as being undefined or containing invalid data), 
+make sure that $bucket has valid data before using it. You could add a simple check before using it:
+
+if (-not $bucket) {
+    Write-Log "Bucket variable is null or empty!" -type "ERROR"
+    continue
+}
+
+This ensures that $bucket is valid before attempting any further operations.
+---------------------------------------------------------
