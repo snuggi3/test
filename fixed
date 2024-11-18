@@ -1,0 +1,96 @@
+# Parameters: Define pairs of source buckets and NetApp locations
+$bucketPairs = @(
+    @{ SourceBucket = "gs://"; NetApp = "C:\" },
+    @{ SourceBucket = "gs://"; NetApp = "C:\" }
+)
+$archiveBucket = "gs://"
+$logDir = "C:\logs"
+$dateTime = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+$logFile = "$logDir\transfer_log_$dateTime.txt"
+
+# Ensure log directory exists
+if (-not (Test-Path $logDir)) {
+    New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+}
+# Create an empty log file
+Set-Content -Path $logFile -Value ""
+
+# Function to write log messages
+function Write-Log {
+    param (
+        [string]$message,
+        [string]$type = "INFO"  # Default type is INFO
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "$timestamp [$type] $message"
+    Add-Content -Path $logFile -Value $logMessage
+}
+
+# Function to process files from a source bucket to a specific NetApp location
+function Process-GCPBucket {
+    param (
+        [string]$sourceBucket,
+        [string]$netapp,
+        [string]$archiveBucket
+    )
+
+    Write-Log "Starting file transfer for GCP bucket: $sourceBucket to NetApp location: $netapp" -type "PROCESS"
+
+    # List files from the GCP bucket
+    $listFilesCommand = "gcloud storage ls -r $sourceBucket/**.pgp"
+    Write-Log "Executing command: $listFilesCommand" -type "COMMAND"
+
+    try {
+        # Capture files and filter out directories (lines ending with '/')
+        $sourceFiles = Invoke-Expression $listFilesCommand | Where-Object { $_ -notmatch '/$' }
+        if ($sourceFiles -eq $null -or $sourceFiles.Count -eq 0) {
+            Write-Log "No files found to transfer from $sourceBucket.`n" -type "WARNING"
+            return
+        }
+
+        Write-Log "Files listed successfully from $sourceBucket." -type "INFO"
+    } catch {
+        Write-Log "Error listing files in bucket $sourceBucket : $($_.Exception.Message)`n" -type "ERROR"
+        return
+    }
+
+    # Process each file
+    foreach ($sourceFile in $sourceFiles) {
+        if ($sourceFile -and (-not $sourceFile.EndsWith("/"))) {
+            $fileName = [System.IO.Path]::GetFileName($sourceFile)
+            $destinationPath = Join-Path -Path $netapp -ChildPath $fileName
+
+            # Copy file to NetApp
+            $copyFileCommand = "gcloud storage cp -n $sourceFile $destinationPath"
+            Write-Log "Copying file: $fileName to $destinationPath" -type "COMMAND"
+
+            try {
+                Invoke-Expression $copyFileCommand
+                Write-Log "File copied successfully: $destinationPath" -type "SUCCESS"
+            } catch {
+                Write-Log "Failed to copy file: $fileName to NetApp. Error: $($_.Exception.Message)" -type "FAILURE"
+                continue
+            }
+
+            # Move the file to the archive bucket after successful copy
+            $archiveFileCommand = "gcloud storage mv $sourceFile $archiveBucket/"
+            Write-Log "Archiving file: $sourceFile to $archiveBucket" -type "COMMAND"
+
+            try {
+                Invoke-Expression $archiveFileCommand
+                Write-Log "File archived successfully: $sourceFile to $archiveBucket`n" -type "SUCCESS"
+            } catch {
+                Write-Log "Failed to archive file: $sourceFile. Error: $($_.Exception.Message)`n" -type "FAILURE"
+            }
+        }
+    }
+
+    Write-Log "File transfer process completed for GCP bucket: $sourceBucket.`n" -type "PROCESS"
+}
+
+# Iterate over each bucket pair and run the function
+foreach ($pair in $bucketPairs) {
+    Process-GCPBucket -sourceBucket $pair.SourceBucket -netapp $pair.NetApp -archiveBucket $archiveBucket
+}
+
+Write-Log "All file transfer processes completed." -type "PROCESS"
