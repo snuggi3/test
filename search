@@ -1,0 +1,113 @@
+# Define the UNC path and output locations
+$UNCPath = "\\your\unc\path"  # Replace with your UNC path
+$DriveLetter = "Z:"  # Replace with your preferred drive letter
+$OutputCSV = "C:\ExportedUNCDrive_SearchResults.csv"  # Path to export the CSV file
+$LogFile = "C:\UNCDriveScan_Search.log"  # Path to save the log file
+$SearchTerm = "partial_filename"  # Replace with part of the filename you are searching for
+
+# Log Start Time
+$StartTime = Get-Date
+Add-Content -Path $LogFile -Value "=== Search Started: $StartTime ==="
+Add-Content -Path $LogFile -Value "Search Term: *$SearchTerm*"
+
+# Map UNC Path to a Drive Letter
+try {
+    if (!(Test-Path -Path "$DriveLetter\")) {
+        New-PSDrive -Name $DriveLetter.TrimEnd(':') -PSProvider FileSystem -Root $UNCPath -Persist -ErrorAction Stop
+        Add-Content -Path $LogFile -Value "Mapped $UNCPath to $DriveLetter successfully."
+    } else {
+        Add-Content -Path $LogFile -Value "$DriveLetter is already mapped."
+    }
+} catch {
+    Add-Content -Path $LogFile -Value "ERROR: Failed to map $UNCPath to $DriveLetter. Error: $_"
+    Write-Host "Failed to map the UNC path. Exiting script."
+    exit
+}
+
+# Function to calculate the size of a folder
+function Get-FolderSizeMB {
+    param (
+        [string]$FolderPath
+    )
+    try {
+        # Get all files in the folder and subfolders
+        $folderItems = Get-ChildItem -Path $FolderPath -Recurse -File -ErrorAction Stop
+        $totalSize = ($folderItems | Measure-Object -Property Length -Sum).Sum
+        return [math]::Round($totalSize / 1MB, 2)  # Convert to MB and round to 2 decimal places
+    } catch {
+        $ErrorMessage = "WARNING: Unable to calculate size for folder: $FolderPath. Error: $_"
+        Add-Content -Path $LogFile -Value $ErrorMessage
+        Write-Warning $ErrorMessage
+        return 0  # Return 0 MB for folders that can't be accessed
+    }
+}
+
+# Initialize an array to store file and folder details
+$Results = @()
+
+# Recursively search all files and folders in the mapped drive for matches
+Add-Content -Path $LogFile -Value "Starting search on $DriveLetter for items matching *$SearchTerm*..."
+Get-ChildItem -Path "$DriveLetter\" -Recurse -Force | Where-Object {
+    # Match files or folders with the search term (wildcards added automatically)
+    $_.Name -like "*$SearchTerm*"
+} | ForEach-Object {
+    $Item = $_
+    
+    # Check if the item is a directory and skip restricted/system folders
+    if ($Item.PSIsContainer -and -not (Test-Path $Item.FullName)) {
+        $WarningMessage = "WARNING: Skipping inaccessible folder: $($Item.FullName)"
+        Add-Content -Path $LogFile -Value $WarningMessage
+        Write-Warning $WarningMessage
+        return
+    }
+    
+    # Check if the item is a directory or a file
+    $Type = if ($Item.PSIsContainer) { "Directory" } else { "File" }
+    
+    # Get the full extension, including multi-part extensions like .csv.pgp
+    $Extension = if (-not $Item.PSIsContainer) { 
+        $IndexOfFirstDot = $Item.Name.IndexOf(".")
+        if ($IndexOfFirstDot -ge 0) {
+            $Item.Name.Substring($IndexOfFirstDot)  # Everything from the first dot onwards
+        } else {
+            ""  # No extension
+        }
+    } else {
+        ""  # Directories have no extension
+    }
+    
+    # Get the size in MB
+    $SizeMB = if ($Item.PSIsContainer) {
+        # Get folder size
+        Get-FolderSizeMB -FolderPath $Item.FullName
+    } else {
+        # Get file size
+        [math]::Round($Item.Length / 1MB, 2)  # Convert file size to MB and round to 2 decimal places
+    }
+    
+    # Add the details to the results array
+    $Results += [PSCustomObject]@{
+        Name            = $Item.Name
+        Type            = $Type
+        Extension       = $Extension
+        SizeMB          = $SizeMB
+        FullPath        = $Item.FullName
+        LastModified    = $Item.LastWriteTime
+    }
+}
+
+# Export the results to a CSV file
+try {
+    $Results | Export-Csv -Path $OutputCSV -NoTypeInformation -Encoding UTF8
+    Add-Content -Path $LogFile -Value "Export completed. The file is saved to $OutputCSV"
+} catch {
+    Add-Content -Path $LogFile -Value "ERROR: Failed to export results to CSV. Error: $_"
+    Write-Host "Failed to export results to CSV. Check the log for details."
+}
+
+# Log Completion Time
+$EndTime = Get-Date
+Add-Content -Path $LogFile -Value "=== Search Completed: $EndTime ==="
+Add-Content -Path $LogFile -Value "Total Time Taken: $($EndTime - $StartTime)"
+
+Write-Host "Search completed. Logs are saved to $LogFile."
