@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MOVEit Automation Task Notification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px #cccccc;
+        }
+        h2 {
+            color: #333366;
+        }
+        .info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #eef2f3;
+            border-left: 4px solid #007bff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #dddddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666666;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>🚀 MOVEit Automation Task Notification</h2>
+        <p>Hello,</p>
+
+        <div class="info">
+            <p>The following MOVEit Automation task has been executed:</p>
+        </div>
+
+        <table>
+            <tr>
+                <th>Task Name</th>
+                <td>{{TaskName}}</td>
+            </tr>
+            <tr>
+                <th>Status</th>
+                <td>{{Status}}</td>
+            </tr>
+            <tr>
+                <th>Start Time</th>
+                <td>{{StartTime}}</td>
+            </tr>
+            <tr>
+                <th>End Time</th>
+                <td>{{EndTime}}</td>
+            </tr>
+            <tr>
+                <th>Files Processed</th>
+                <td>{{FilesProcessed}}</td>
+            </tr>
+        </table>
+
+        <p>If you need more details, please check the MOVEit Automation logs.</p>
+
+        <div class="footer">
+            <p>⚠️ This is an automated email. Please do not reply.</p>
+            <p><strong>MOVEit Automation System</strong></p>
+        </div>
+    </div>
+
+</body>
+</html>
