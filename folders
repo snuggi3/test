@@ -1,0 +1,89 @@
+# Define the UNC path and output locations
+$UNCPath = "\\your\unc\path"  # Replace with your UNC path
+$DriveLetter = "Z:"  # Replace with your preferred drive letter
+$OutputCSV = "C:\ExportedUNCDrive_SearchResults.csv"  # Path to export the CSV file
+$LogFile = "C:\UNCDriveScan_Search.log"  # Path to save the log file
+$SearchTerm = "partial_filename"  # Replace with part of the filename you are searching for
+
+# Log Start Time
+$StartTime = Get-Date
+Add-Content -Path $LogFile -Value "=== Search Started: $StartTime ==="
+Add-Content -Path $LogFile -Value "Search Term: *$SearchTerm*"
+
+# Map UNC Path to a Drive Letter
+try {
+    if (!(Test-Path -Path "$DriveLetter\")) {
+        New-PSDrive -Name $DriveLetter.TrimEnd(':') -PSProvider FileSystem -Root $UNCPath -Persist -ErrorAction Stop
+        Add-Content -Path $LogFile -Value "Mapped $UNCPath to $DriveLetter successfully."
+    } else {
+        Add-Content -Path $LogFile -Value "$DriveLetter is already mapped."
+    }
+} catch {
+    Add-Content -Path $LogFile -Value "ERROR: Failed to map $UNCPath to $DriveLetter. Error: $_"
+    Write-Host "Failed to map the UNC path. Exiting script."
+    exit
+}
+
+# Function to calculate the size of a folder
+function Get-FolderSizeMB {
+    param (
+        [string]$FolderPath
+    )
+    try {
+        $folderItems = Get-ChildItem -Path $FolderPath -Recurse -File -ErrorAction Stop
+        $totalSize = ($folderItems | Measure-Object -Property Length -Sum).Sum
+        return [math]::Round($totalSize / 1MB, 2)
+    } catch {
+        $ErrorMessage = "WARNING: Unable to calculate size for folder: $FolderPath. Error: $_"
+        Add-Content -Path $LogFile -Value $ErrorMessage
+        Write-Warning $ErrorMessage
+        return 0
+    }
+}
+
+# Initialize an array to store folder details
+$Results = @()
+
+# Recursively search all directories in the mapped drive for matches
+Add-Content -Path $LogFile -Value "Starting search on $DriveLetter for directories matching *$SearchTerm*..."
+Get-ChildItem -Path "$DriveLetter\" -Recurse -Force -Directory | Where-Object {
+    $_.Name -like "*$SearchTerm*"
+} | ForEach-Object {
+    $Item = $_
+    
+    # Check if the item is a directory and skip restricted/system folders
+    if (-not (Test-Path $Item.FullName)) {
+        $WarningMessage = "WARNING: Skipping inaccessible folder: $($Item.FullName)"
+        Add-Content -Path $LogFile -Value $WarningMessage
+        Write-Warning $WarningMessage
+        return
+    }
+    
+    # Get the size in MB
+    $SizeMB = Get-FolderSizeMB -FolderPath $Item.FullName
+    
+    # Add the details to the results array
+    $Results += [PSCustomObject]@{
+        Name         = $Item.Name
+        Type         = "Directory"
+        SizeMB       = $SizeMB
+        FullPath     = $Item.FullName
+        LastModified = $Item.LastWriteTime
+    }
+}
+
+# Export the results to a CSV file
+try {
+    $Results | Export-Csv -Path $OutputCSV -NoTypeInformation -Encoding UTF8
+    Add-Content -Path $LogFile -Value "Export completed. The file is saved to $OutputCSV"
+} catch {
+    Add-Content -Path $LogFile -Value "ERROR: Failed to export results to CSV. Error: $_"
+    Write-Host "Failed to export results to CSV. Check the log for details."
+}
+
+# Log Completion Time
+$EndTime = Get-Date
+Add-Content -Path $LogFile -Value "=== Search Completed: $EndTime ==="
+Add-Content -Path $LogFile -Value "Total Time Taken: $($EndTime - $StartTime)"
+
+Write-Host "Search completed. Logs are saved to $LogFile."
